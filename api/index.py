@@ -5,7 +5,7 @@ import os
 app = Flask(__name__)
 
 # Telegram Bot Token (you'll need to create a bot via @BotFather)
-BOT_TOKEN = "8535781652:AAFVr1uwapaB_Lok4THScbav7JHoTpgIjZk"
+BOT_TOKEN = os.getenv('BOT_TOKEN', 'YOUR_BOT_TOKEN_HERE')
 BASE_URL = f'https://api.telegram.org/bot{BOT_TOKEN}'
 
 @app.route('/')
