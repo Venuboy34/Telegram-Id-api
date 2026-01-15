@@ -11,5 +11,8 @@
       "src": "/(.*)",
       "dest": "api/index.py"
     }
-  ]
+  ],
+  "env": {
+    "BOT_TOKEN": "8349545303:AAHJOtAtL0ktnt_ZroRlrW8hRBH5u0q8rbo"
+  }
 }
