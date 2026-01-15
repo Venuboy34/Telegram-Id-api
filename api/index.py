@@ -1,129 +1,184 @@
 from flask import Flask, request, jsonify
-from telethon.sync import TelegramClient
-from telethon.tl.types import User, Channel, Chat
+import requests
 import os
-import asyncio
 
 app = Flask(__name__)
 
-# Telegram API credentials
-API_ID = '20288994'
-API_HASH = 'd702614912f1ad370a0d18786002adbf'
-PHONE = '+94703993277'
+# Telegram Bot Token (you'll need to create a bot via @BotFather)
+BOT_TOKEN = "8535781652:AAFVr1uwapaB_Lok4THScbav7JHoTpgIjZk"
+BASE_URL = f'https://api.telegram.org/bot{BOT_TOKEN}'
 
 @app.route('/')
 def home():
     return jsonify({
         "status": "active",
-        "message": "Telegram Info Finder API",
+        "name": "Telegram Info Finder API",
+        "version": "2.0",
         "endpoints": {
-            "/api/find": "Find Telegram user/group/channel/bot info",
-            "method": "GET",
-            "params": "username or id"
+            "/api/user": "Get user info by user_id",
+            "/api/chat": "Get chat/channel/group info by chat_id or @username",
+            "/api/check": "Check if user is premium"
+        },
+        "usage": {
+            "user": "/api/user?id=123456789",
+            "chat": "/api/chat?id=@username or -100123456789",
+            "check": "/api/check?id=123456789"
         }
     })
 
-@app.route('/api/find', methods=['GET'])
-def find_telegram_entity():
+@app.route('/api/user', methods=['GET'])
+def get_user():
+    """Get user information by user_id"""
     try:
-        query = request.args.get('q')
+        user_id = request.args.get('id')
         
-        if not query:
+        if not user_id:
             return jsonify({
-                "error": "Missing 'q' parameter",
-                "usage": "/api/find?q=username_or_id"
+                "error": "Missing 'id' parameter",
+                "usage": "/api/user?id=123456789"
             }), 400
         
-        # Run async function
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(get_entity_info(query))
-        loop.close()
+        # Use getChat method
+        url = f'{BASE_URL}/getChat'
+        response = requests.get(url, params={'chat_id': user_id})
+        data = response.json()
         
-        return jsonify(result)
+        if not data.get('ok'):
+            return jsonify({
+                "success": False,
+                "error": data.get('description', 'Unknown error')
+            }), 400
+        
+        result = data['result']
+        
+        user_info = {
+            "success": True,
+            "type": result.get('type'),
+            "id": result.get('id'),
+            "first_name": result.get('first_name'),
+            "last_name": result.get('last_name'),
+            "username": result.get('username'),
+            "bio": result.get('bio'),
+            "has_private_forwards": result.get('has_private_forwards'),
+            "has_restricted_voice_and_video_messages": result.get('has_restricted_voice_and_video_messages')
+        }
+        
+        return jsonify(user_info)
     
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-async def get_entity_info(query):
-    """Fetch entity information from Telegram"""
-    
-    if not API_ID or not API_HASH:
-        return {"error": "API credentials not configured"}
-    
-    # Create session
-    client = TelegramClient('session', API_ID, API_HASH)
-    
+@app.route('/api/chat', methods=['GET'])
+def get_chat():
+    """Get chat/channel/group information"""
     try:
-        await client.connect()
+        chat_id = request.args.get('id')
         
-        if not await client.is_user_authorized():
-            return {"error": "Bot not authorized. Please authorize first."}
+        if not chat_id:
+            return jsonify({
+                "error": "Missing 'id' parameter",
+                "usage": "/api/chat?id=@username or -100123456789"
+            }), 400
         
-        # Get entity
-        entity = await client.get_entity(query)
+        url = f'{BASE_URL}/getChat'
+        response = requests.get(url, params={'chat_id': chat_id})
+        data = response.json()
         
-        # Extract information based on entity type
-        info = {
-            "id": entity.id,
-            "access_hash": getattr(entity, 'access_hash', None)
-        }
+        if not data.get('ok'):
+            return jsonify({
+                "success": False,
+                "error": data.get('description', 'Unknown error')
+            }), 400
         
-        if isinstance(entity, User):
-            info.update({
-                "type": "bot" if entity.bot else "user",
-                "first_name": entity.first_name,
-                "last_name": entity.last_name,
-                "username": entity.username,
-                "phone": entity.phone,
-                "premium": getattr(entity, 'premium', False),
-                "verified": entity.verified,
-                "restricted": entity.restricted,
-                "scam": entity.scam,
-                "fake": getattr(entity, 'fake', False),
-                "bot": entity.bot
-            })
+        result = data['result']
         
-        elif isinstance(entity, Channel):
-            info.update({
-                "type": "channel" if entity.broadcast else "supergroup",
-                "title": entity.title,
-                "username": entity.username,
-                "participants_count": getattr(entity, 'participants_count', None),
-                "verified": entity.verified,
-                "restricted": entity.restricted,
-                "scam": entity.scam,
-                "fake": getattr(entity, 'fake', False),
-                "megagroup": entity.megagroup,
-                "broadcast": entity.broadcast
-            })
-        
-        elif isinstance(entity, Chat):
-            info.update({
-                "type": "group",
-                "title": entity.title,
-                "participants_count": getattr(entity, 'participants_count', None),
-                "migrated_to": getattr(entity, 'migrated_to', None)
-            })
-        
-        return {
+        chat_info = {
             "success": True,
-            "data": info
+            "type": result.get('type'),
+            "id": result.get('id'),
+            "title": result.get('title'),
+            "username": result.get('username'),
+            "description": result.get('description'),
+            "invite_link": result.get('invite_link'),
+            "member_count": result.get('member_count') if result.get('type') != 'private' else None,
+            "photo": result.get('photo')
         }
+        
+        return jsonify(chat_info)
     
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/check', methods=['GET'])
+def check_premium():
+    """Check if a user has Telegram Premium"""
+    try:
+        user_id = request.args.get('id')
+        
+        if not user_id:
+            return jsonify({
+                "error": "Missing 'id' parameter",
+                "usage": "/api/check?id=123456789"
+            }), 400
+        
+        url = f'{BASE_URL}/getChat'
+        response = requests.get(url, params={'chat_id': user_id})
+        data = response.json()
+        
+        if not data.get('ok'):
+            return jsonify({
+                "success": False,
+                "error": data.get('description', 'Unknown error')
+            }), 400
+        
+        result = data['result']
+        
+        # Note: Premium status might not be available via Bot API
+        premium_info = {
+            "success": True,
+            "user_id": result.get('id'),
+            "username": result.get('username'),
+            "first_name": result.get('first_name'),
+            "premium": result.get('is_premium', False),
+            "note": "Premium status detection is limited via Bot API"
         }
+        
+        return jsonify(premium_info)
     
-    finally:
-        await client.disconnect()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-# Vercel serverless handler
-def handler(request):
-    with app.request_context(request.environ):
-        return app.full_dispatch_request()
+@app.route('/api/members', methods=['GET'])
+def get_member_count():
+    """Get chat member count"""
+    try:
+        chat_id = request.args.get('id')
+        
+        if not chat_id:
+            return jsonify({
+                "error": "Missing 'id' parameter",
+                "usage": "/api/members?id=@username"
+            }), 400
+        
+        url = f'{BASE_URL}/getChatMemberCount'
+        response = requests.get(url, params={'chat_id': chat_id})
+        data = response.json()
+        
+        if not data.get('ok'):
+            return jsonify({
+                "success": False,
+                "error": data.get('description', 'Unknown error')
+            }), 400
+        
+        return jsonify({
+            "success": True,
+            "chat_id": chat_id,
+            "member_count": data['result']
+        })
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
-    app.run(debug=True)
+# Vercel handler
+def handler(environ, start_response):
+    return app(environ, start_response)
